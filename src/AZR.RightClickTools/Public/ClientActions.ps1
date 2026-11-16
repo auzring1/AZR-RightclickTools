@@ -16,6 +16,11 @@ function Get-AZRClientActionList {
         [pscustomobject]@{ Name = 'SoftwareUpdatesScan';      DisplayName = 'Software Updates Scan';                 ScheduleId = '{00000000-0000-0000-0000-000000000113}' }
         [pscustomobject]@{ Name = 'SoftwareUpdatesEvaluation';DisplayName = 'Software Updates Deployment Evaluation'; ScheduleId = '{00000000-0000-0000-0000-000000000108}' }
         [pscustomobject]@{ Name = 'ApplicationEvaluation';    DisplayName = 'Application Deployment Evaluation';    ScheduleId = '{00000000-0000-0000-0000-000000000121}' }
+        [pscustomobject]@{ Name = 'FileCollection';           DisplayName = 'File Collection';                       ScheduleId = '{00000000-0000-0000-0000-000000000010}' }
+        [pscustomobject]@{ Name = 'SoftwareMeteringUsage';    DisplayName = 'Software Metering Usage Report';        ScheduleId = '{00000000-0000-0000-0000-000000000031}' }
+        [pscustomobject]@{ Name = 'WindowsInstallerSource';   DisplayName = 'Windows Installer Source List Update';  ScheduleId = '{00000000-0000-0000-0000-000000000032}' }
+        [pscustomobject]@{ Name = 'SendUnsentStateMessages';  DisplayName = 'Send Unsent State Messages';            ScheduleId = '{00000000-0000-0000-0000-000000000111}' }
+        [pscustomobject]@{ Name = 'ComplianceEvaluation';     DisplayName = 'Compliance (Baseline) Evaluation';      ScheduleId = '{00000000-0000-0000-0000-000000000071}' }
     )
 }
 
@@ -43,8 +48,8 @@ function Invoke-AZRClientAction {
                 if ($PSCmdlet.ShouldProcess($name, $def.DisplayName)) {
                     Invoke-AZRWithCimSession -ComputerName $name -Credential $Credential -ScriptBlock {
                         param($s)
-                        $null = Invoke-CimMethod -CimSession $s -Namespace 'root\ccm' -ClassName 'SMS_Client' `
-                            -MethodName 'TriggerSchedule' -Arguments @{ sScheduleID = $def.ScheduleId } -ErrorAction Stop
+                        $null = Invoke-AZRCim -Session $s -Namespace 'root\ccm' -ClassName 'SMS_Client' `
+                            -MethodName 'TriggerSchedule' -Arguments @{ sScheduleID = $def.ScheduleId }
                     }
                     $result.Success = $true
                     $result.Message = 'Triggered'

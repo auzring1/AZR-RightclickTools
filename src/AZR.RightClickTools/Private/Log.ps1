@@ -1,12 +1,20 @@
-function Get-AZRLogPath {
+function Get-AZRLogDirectory {
     $root = if ($env:AZR_LOG_DIR) { $env:AZR_LOG_DIR }
             elseif ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'AZR-RightClickTools\Logs' }
             else { Join-Path ([System.IO.Path]::GetTempPath()) 'AZR-RightClickTools' }
     if (-not (Test-Path -LiteralPath $root)) { New-Item -ItemType Directory -Path $root -Force | Out-Null }
-    Join-Path $root ('azr-{0:yyyyMMdd}.log' -f (Get-Date))
+    $root
+}
+
+function Get-AZRLogPath {
+    Join-Path (Get-AZRLogDirectory) ('azr-{0:yyyyMMdd}.log' -f (Get-Date))
 }
 
 function Write-AZRLog {
+    <#
+    .SYNOPSIS
+        Writes a plain-text diagnostic line. Never pass secrets (keys, passwords) to this function.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Message,
