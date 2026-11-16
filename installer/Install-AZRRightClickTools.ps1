@@ -18,6 +18,14 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+# $PSScriptRoot is empty when the script text is pasted into a console or run via Invoke-Expression.
+if ([string]::IsNullOrEmpty($PSScriptRoot)) {
+    throw ('Install-AZRRightClickTools.ps1 must be run as a file, not pasted into a console. ' +
+        'Clone or extract the repository, open an elevated PowerShell, cd into it and run: ' +
+        '.\installer\Install-AZRRightClickTools.ps1  ' +
+        "(if script execution is blocked, use: powershell -ExecutionPolicy Bypass -File .\installer\Install-AZRRightClickTools.ps1).")
+}
+
 function Get-AZRConsoleDir {
     if ($env:SMS_ADMIN_UI_PATH) {
         # e.g. C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin
