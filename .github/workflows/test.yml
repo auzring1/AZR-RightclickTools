@@ -14,4 +14,6 @@ jobs:
         shell: pwsh
         run: |
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
-          Invoke-ScriptAnalyzer -Path src, tools, installer -Recurse -Severity Error -EnableExit
+          $findings = 'src', 'tools', 'installer' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Recurse -Severity Error }
+          $findings | Format-Table RuleName, ScriptName, Line, Message -AutoSize
+          if ($findings) { exit 1 }
