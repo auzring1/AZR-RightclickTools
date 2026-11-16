@@ -35,11 +35,25 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details and known assumptio
 
 ## Install
 
-On a workstation with the ConfigMgr console, from an elevated PowerShell:
+On a workstation with the ConfigMgr console:
+
+1. Clone the repository (`git clone https://github.com/auzring1/AZR-RightclickTools`) or download and extract the ZIP.
+2. Open an **elevated** PowerShell (Run as administrator).
+3. `cd` into the repository folder.
+4. Run the installer **as a file**. Do not paste its contents into the console; it needs to know where the repo is and will refuse to run otherwise.
 
 ```powershell
+cd C:\path\to\AZR-RightclickTools
 .\installer\Install-AZRRightClickTools.ps1          # add -WhatIf to preview
 ```
+
+If script execution is blocked, bypass the policy for that one process only:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\installer\Install-AZRRightClickTools.ps1
+```
+
+If you downloaded a ZIP, run `Get-ChildItem -Recurse | Unblock-File` in the extracted folder first.
 
 Restart the console. Use `-ConsoleDir` if the console is not auto-detected. Remove with `.\installer\Uninstall-AZRRightClickTools.ps1`.
 

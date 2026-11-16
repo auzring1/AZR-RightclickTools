@@ -11,9 +11,10 @@
 param(
     [Parameter(Mandatory)][string]$LauncherPath,
     [Parameter(Mandatory)][string]$OutputPath,
-    [string]$ManifestPath = (Join-Path $PSScriptRoot '..\src\Actions.psd1')
+    [string]$ManifestPath = $(if ($PSScriptRoot) { Join-Path $PSScriptRoot '..\src\Actions.psd1' })
 )
 $ErrorActionPreference = 'Stop'
+if (-not $ManifestPath) { throw 'Run Build-ConsoleExtension.ps1 as a file (or pass -ManifestPath); it cannot be pasted into a console.' }
 
 # Console node GUIDs (see docs\ARCHITECTURE.md; verify against your console version).
 $NodeGuids = @{
