@@ -8,7 +8,7 @@ Goal: cover the capability areas of a commercial "enterprise right-click toolkit
 
 Principles that drive every design choice:
 
-1. **Agentless first.** The MVP has no agent or server and runs as the console user, so ConfigMgr RBAC and Windows ACLs still apply. Keep that as the default. Where the commercial product relies on its own agent/server, we use an existing channel (ConfigMgr Run Scripts / client notification, WinRM, Graph) and only add our own optional component late in the plan.
+1. **Agentless, serverless.** The MVP has no agent or server and runs as the console user, so ConfigMgr RBAC and Windows ACLs still apply. That is a hard scope decision, not a default: this project will not add its own agent, management server, role-enforcement layer or commercial support. Where a commercial product relies on those, we use an existing channel (ConfigMgr Run Scripts / client notification, WinRM, Graph) or mark the feature out of scope.
 2. **One manifest, one function.** New menu items go in `src/Actions.psd1` and a function under `Public/`. The manifest schema is extended (M1) rather than bypassed.
 3. **Validate everything from the console.** Reuse `Assert-AZR*`; add validators for new placeholders (UserName, PackageID, DP name, ApplicationName, UPN).
 4. **Destructive actions confirm and log.** Anything that deletes, wipes, uninstalls, reboots or reveals a secret shows a confirmation naming the target(s) and count, and writes an audit entry.
@@ -19,7 +19,7 @@ Principles that drive every design choice:
 - **Node**: where the item appears. Existing console extension XML can add items to the context menu and ribbon of *existing* nodes only. It cannot add new nodes or embedded panes (that needs a compiled console snap-in, which we avoid). Dashboards are therefore a **GUI helper**: a WPF window launched from a menu item (see §3.3).
 - **Mechanism**: CIM = CIM/WMI over WSMan or DCOM; SMSP = SMS Provider WMI (`root\sms\site_XXX`); AdminSvc = ConfigMgr AdminService REST; CMcmd = ConfigMgr PowerShell module; Graph = Microsoft Graph; ADWS = Active Directory Web Services via RSAT `ActiveDirectory` module.
 - **Test**: **CI** = Pester with mocks on `windows-latest` (no real targets); **Lab** = needs a ConfigMgr site, AD, a target client or an Entra/Intune tenant; **Both** = logic unit-tested in CI, behaviour confirmed in lab.
-- **Flags**: 🖥 needs GUI helper, ⚠ risk to review, 🚫 cannot be done free / legally / without our own server, ◐ partial parity.
+- **Flags**: 🖥 needs GUI helper, ⚠ risk to review, 🚫 cannot be done free / legally / without out-of-scope components, ◐ partial parity.
 
 Common ports (target side): WinRM 5985/5986 (HTTP/HTTPS), RPC 135 + dynamic 49152–65535 (DCOM/RPC), SMB 445 (C$, remote registry via SMB not needed), RDP 3389, ConfigMgr client notification 10123 (fast channel), SMS Provider via RPC/DCOM or HTTPS 443 for AdminService, LDAP 389/636 + ADWS 9389, Graph 443 to `graph.microsoft.com` and `login.microsoftonline.com`.
 
@@ -146,37 +146,33 @@ Graph-based, delegated sign-in, least-privilege scopes per action. Devices need 
 | # | Feature | Design |
 |---|---|---|
 | A1 | Workflow builder and runner | Own JSON/YAML workflow schema: ordered steps referencing manifest action IDs, targets from a collection or CSV, conditions, throttles, approvals. Runner = `Invoke-AZRWorkflow` (scheduled task or console). Builder = WPF editor (🖥) that only edits the schema |
-| A2 | REST API | Optional small local service (`Start-AZRApi`, localhost/TLS, token auth) exposing the same action dispatcher. ⚠ Must enforce the allow-list and audit; off by default |
+| A2 | REST API | Optional small local service (`Start-AZRApi`, localhost/TLS, token auth) exposing the same action dispatcher, running as the calling user. ⚠ Audited like any action; off by default; no separate permission layer (ConfigMgr RBAC and Windows rights apply) |
 | A3 | MCP/LLM tool surface | Out of scope for now, listed only because the vendor offers it; revisit after A2 |
 
 ## 5. Enterprise-only management and security features
 
+Out of scope by decision: a central management server/web console, our own role-based permission enforcement, commercial product support, a hosted cloud edition, and centralised licence management (the project is free). Permissions rely entirely on ConfigMgr RBAC, AD and Windows rights of the signed-in admin; the docs say so plainly.
+
 | # | Capability | Our approach | Honest status |
 |---|---|---|---|
-| E1 | Central web console for config and monitoring | Optional later "AZR Server": ASP.NET Core minimal service + SQL/SQLite, settings, role mapping, audit store, license-free | ◐ Large effort; build only after M1–M6 prove demand. Not needed for single-admin use |
-| E2 | Role-based permissions | Phase 1: **advisory** allow-list per AD group in a machine policy file, enforced by the launcher. Phase 2: **real enforcement** needs a trust boundary: a JEA endpoint or the E1 broker running under a service identity | ⚠ Client-side-only RBAC can be bypassed by anyone with the underlying rights; we say so in the docs |
-| E3 | Auditing and advanced logging | JSON-lines audit (M1), Windows Event Log, optional forwarding (WEF, syslog, Splunk HEC); tamper resistance needs E1 | ◐ |
-| E4 | Cloud Management Gateway support | Route through ConfigMgr channels that already traverse the CMG: **Run Scripts, CMPivot, client notification** via AdminSvc over HTTPS. Direct CIM/DCOM cannot reach internet clients | ◐ Subset of actions only (those expressible as Run Scripts) |
-| E5 | Untrusted domain support | Alternate credentials, HTTPS WinRM (5986) or TrustedHosts, Kerberos-with-SPN or NTLM allowances, AD tools take `-Server`/`-Credential` | Doable; test matrix needs a second forest in lab |
-| E6 | Centralised licence and settings; fast channel | Licence: **n/a** (free). Settings: E1 or a shared policy file on a UNC path. Fast channel: use ConfigMgr client notification (E4) | |
-| E7 | Product support | Community issues/PRs | 🚫 No commercial support |
-| E8 | Hosted cloud edition | | 🚫 Out of scope |
+| E1 | Auditing and advanced logging | JSON-lines audit (M1), Windows Event Log, optional forwarding (WEF, syslog, Splunk HEC). Not tamper-proof against the local admin; forward to a log collector for that | ◐ |
+| E2 | Cloud Management Gateway support | Route through ConfigMgr channels that already traverse the CMG: **Run Scripts, CMPivot, client notification** via AdminSvc over HTTPS. Direct CIM/DCOM cannot reach internet clients | ◐ Subset of actions only (those expressible as Run Scripts); this also serves as the fast-channel option via client notification |
+| E3 | Untrusted domain support | Alternate credentials, HTTPS WinRM (5986) or TrustedHosts, Kerberos-with-SPN or NTLM allowances, AD tools take `-Server`/`-Credential` | Doable; test matrix needs a second forest in lab |
 
-## 6. Dependencies on the vendor agent and what we do instead
+## 6. Vendor agent dependency and what we do instead
 
-The commercial product ships an agent and proxy so remote tools work without direct access to the device. We will not clone that. Order of preference:
+The commercial product ships an agent and proxy so remote tools work without direct access to the device. We will not build an agent or any equivalent server component. Order of preference:
 
 1. Direct CIM/WinRM/SMB when the admin workstation can reach the device (the MVP model).
 2. ConfigMgr channels (Run Scripts / CMPivot / client notification) when the device is on a CMG or behind firewalls; read-oriented and script-shaped actions only.
-3. Optional AZR agent only if demand justifies it. Design constraints if built: outbound-only TLS, mutual authentication, signed task manifests, no listening ports, least-privilege service account, full audit. That is a security-product-sized commitment, so it is the last item in §8.
+3. Anything that needs neither path (for example internet-only devices without a CMG) is out of scope.
 
 ## 7. Add-on products
 
 | # | Add-on | Plan | Status |
 |---|---|---|---|
 | X1 | **Insights**: user-installed software, monitors/docks, network drives and printers, ODBC, local admins, update status, BitLocker/TPM, endpoint protection, warranty, SSRS reports, ITSM integration | Hardware-inventory extension MOF (original classes) + a set of original SSRS `.rdl` reports + dashboards (H-series). Warranty via vendor APIs (Dell, Lenovo, HP) using the admin's own API keys | ◐ Doable. ⚠ Vendor API terms and rate limits; keys in the credential store. ServiceNow/ITSM: REST push, own mapping |
-| X2 | **Privileged access**: temporary admin with activation codes, role-gated BitLocker/LAPS retrieval, reports | Role-gating arrives with E2. Temporary admin = just-in-time group membership with expiry (Windows LAPS rotation after use; `Add-LocalGroupMember` with scheduled removal) | 🚫 Activation-code flow needs a trusted server (E1) and an agent; until then we offer JIT via AD group with TTL, ◐ |
-| X3 | **Patching**: third-party update catalogue of thousands of titles, scheduling around Patch Tuesday, notifications | Own small catalogue format (`catalog/*.yml`: detection rule, silent switches, vendor download URL) generating ConfigMgr applications through CMcmd, Patch Tuesday window logic, SMTP notifications | 🚫 A comparably sized, maintained catalogue cannot be produced or redistributed free; vendor installers must not be redistributed. We ship the engine plus a small community-contributed catalogue, and can optionally ingest winget manifests (MIT) where licences allow |
+| X2 | **Patching**: third-party application updates, scheduling around Patch Tuesday, notifications | **Winget is the source.** Read package metadata from the winget community repository and its manifests (installer URLs, silent switches, hashes, versions, detection hints) and generate ConfigMgr applications/deployments through CMcmd (Intune via Graph later), with version-compare logic, Patch Tuesday window scheduling and SMTP notifications. No self-maintained catalogue | ◐ Quality depends on winget manifests: some lack reliable detection rules, so we add per-app overrides in a small local file. ⚠ Installers are downloaded from vendor URLs and verified against the manifest SHA-256, never redistributed by us; respect the winget repo licence (MIT) and each vendor's terms. Needs a lab for ConfigMgr application creation |
 
 ## 8. Milestones (highest value first)
 
@@ -191,11 +187,11 @@ Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3+ weeks of focused work, for one d
 | **M5 Content, apps, users, collections** | C1, C2, C4, U1, U3, D13 | M | Admin workflow breadth across other nodes |
 | **M6 Intune / Entra / Autopilot** | I1–I5, D11 cloud part | L | Needs Graph helper and a test tenant; modern-management need |
 | **M7 Dashboards** | H1–H7, C3 | L | Built on M2–M6 data helpers |
-| **M8 Governance and hard environments** | E2, E3, E4, E5, D15, X2 (JIT variant) | L | Needed in larger orgs; JEA/broker decisions shape security model |
+| **M8 Hard environments** | E1 (audit forwarding), E2 (CMG via Run Scripts), E3 (untrusted domains), D15 | M | Needed in larger or segmented orgs; no role layer, so rights come from ConfigMgr/AD |
 | **M9 Kiosk manager** | K1–K3 | M | Niche, lab-heavy |
 | **M10 Automation + API** | A1, A2 | L | Best once the action set is stable |
-| **M11 Insights and patching** | X1, X3 | L | Largest legal/curation risk; optional |
-| **Later / not planned** | E1 (central server), optional agent, E7/E8, I6, A3 | | See §5–§6 |
+| **M11 Insights and patching** | X1, X2 (winget-based) | L | Largest legal risk is installer licensing; optional |
+| **Out of scope** | Management server, agent, role enforcement, commercial support, hosted edition, privileged-access add-on (needs server/agent), I6, A3 | | See §5–§6 |
 
 Suggested first slice for review: **M1 + M2 + M3**.
 
@@ -204,7 +200,7 @@ Suggested first slice for review: **M1 + M2 + M3**.
 **CI (`windows-latest`, Pester + PSScriptAnalyzer) can cover:**
 - Manifest ↔ function mapping, schema, XML generation/escaping per node (M1).
 - All validators, including new placeholders and negative cases (injection strings).
-- Business logic behind mocks: result shaping, redaction of secrets, audit entries, confirmation policy, throttling, workflow evaluation, catalogue parsing.
+- Business logic behind mocks: result shaping, redaction of secrets, audit entries, confirmation policy, throttling, workflow evaluation, winget manifest parsing.
 - Graph and AdminSvc clients against a local stub HTTP server (request shape, paging, errors).
 - WPF windows can be constructed headlessly for load/binding smoke tests; layout is checked manually.
 - Add a CI rule: no function that writes a `Secret`-class value to the log (static test over audit/log calls).
@@ -213,7 +209,7 @@ Suggested first slice for review: **M1 + M2 + M3**.
 
 ## 10. Security and licensing notes
 
-- Secrets (S2, S3, U2, X2): confirmation, reason capture, audit, UI-only display, clipboard auto-clear, never in logs/command lines. Role gating arrives with E2; until then document that anyone who can run the tool with their own rights can read what their rights allow.
+- Secrets (S2, S3, U2): confirmation, reason capture, audit, UI-only display, clipboard auto-clear, never in logs/command lines. We do not add our own permission layer; anyone who can run the tool with their own rights can read what those rights allow, and the docs state that.
 - Remote execution primitives (`Win32_Process.Create`, Run Scripts, WinRM): commands are built only from fixed templates plus validated parameters; scripts for D15 are stored, hashed, and logged by hash.
 - Graph: delegated, interactive auth, per-feature scopes, no stored refresh tokens beyond MSAL's cache.
 - Bulk actions: count-based confirmation, throttle, dry-run for destructive ones.
